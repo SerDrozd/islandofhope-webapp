@@ -1,6 +1,25 @@
 (function () {
   const tg = window.Telegram?.WebApp;
+    const diag = {
+      hasTelegramObject: !!window.Telegram,
+      hasWebApp: !!window.Telegram?.WebApp,
+      ua: navigator.userAgent,
+      initDataLen: window.Telegram?.WebApp?.initData?.length || 0,
+      hashHasTgWebAppData: /tgWebAppData=/.test(location.hash || ""),
+      hashLen: (location.hash || "").length,
+    };
 
+    const dbg = document.createElement("pre");
+    dbg.style.whiteSpace = "pre-wrap";
+    dbg.style.fontSize = "12px";
+    dbg.style.opacity = "0.9";
+    dbg.style.marginTop = "12px";
+    dbg.style.padding = "10px";
+    dbg.style.borderRadius = "12px";
+    dbg.style.border = "1px solid rgba(255,255,255,.12)";
+    dbg.style.background = "rgba(255,255,255,.04)";
+    dbg.textContent = "DIAG:\n" + JSON.stringify(diag, null, 2);
+    document.querySelector(".card")?.appendChild(dbg);
   if (tg) {
     tg.ready();
     tg.expand();
