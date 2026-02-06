@@ -1,19 +1,11 @@
 (function () {
   const tg = window.Telegram?.WebApp;
+
   if (tg) {
     tg.ready();
-    console.log("tg exists:", !!tg);
-    console.log("initData length:", tg?.initData?.length || 0);
-    console.log("initDataUnsafe:", tg?.initDataUnsafe || null);
     tg.expand();
   }
-  const dbg = document.createElement("div");
-  dbg.style.fontSize = "12px";
-  dbg.style.opacity = "0.8";
-  dbg.style.marginTop = "10px";
-  dbg.textContent = "initData length: " + (tg?.initData?.length || 0);
-  document.querySelector(".card")?.appendChild(dbg);
-  
+
   const qs = new URLSearchParams(location.search);
   const mode = (qs.get("mode") || "task").toLowerCase();
   const dataB64 = qs.get("data") || "";
@@ -33,10 +25,11 @@
 
   function b64ToJson(b64) {
     try {
-      // urlsafe base64
-      const padded = b64.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((b64.length + 3) % 4);
+      const padded =
+        b64.replace(/-/g, "+").replace(/_/g, "/") +
+        "===".slice((b64.length + 3) % 4);
       const raw = atob(padded);
-      const bytes = new Uint8Array([...raw].map(c => c.charCodeAt(0)));
+      const bytes = new Uint8Array([...raw].map((c) => c.charCodeAt(0)));
       const str = new TextDecoder("utf-8").decode(bytes);
       return JSON.parse(str);
     } catch {
@@ -44,14 +37,32 @@
     }
   }
 
+  // ---- initData fallback: try to extract from URL hash (#tgWebAppData=...) ----
+  function extractInitData() {
+    if (tg?.initData && tg.initData.length > 0) return tg.initData;
+
+    const h = window.location.hash || "";
+    const m = h.match(/tgWebAppData=([^&]+)/);
+    if (m && m[1]) {
+      try {
+        return decodeURIComponent(m[1]);
+      } catch {
+        return m[1];
+      }
+    }
+    return "";
+  }
+
   // Toggle cargo
   const cargoBtn = document.getElementById("taskCargo");
   let cargoState = false;
+
   function setCargo(v) {
     cargoState = !!v;
-    cargoBtn.setAttribute("aria-pressed", cargoState ? "true" : "false");
-    cargoBtn.textContent = cargoState ? "Да" : "Нет";
+    cargoBtn?.setAttribute("aria-pressed", cargoState ? "true" : "false");
+    if (cargoBtn) cargoBtn.textContent = cargoState ? "Да" : "Нет";
   }
+
   cargoBtn?.addEventListener("click", () => setCargo(!cargoState));
 
   // Show correct form
@@ -95,10 +106,18 @@
 
   function send(payload) {
     if (!tg) {
-      showStatus("Открой это внутри Telegram.", false);
+      showStatus("⛔ Открой форму внутри Telegram (WebApp).", false);
       return;
     }
-    payload.initData = tg.initData; // важно: подпись
+
+    const initData = extractInitData();
+    payload.initData = initData;
+
+    if (!initData) {
+      showStatus("⛔ initData пустой. Открывай форму только кнопкой бота.", false);
+      return;
+    }
+
     tg.sendData(JSON.stringify(payload));
     showStatus("✅ Отправлено", true);
     setTimeout(() => tg.close(), 450);
@@ -106,6 +125,7 @@
 
   taskForm.addEventListener("submit", (e) => {
     e.preventDefault();
+
     const id = (document.getElementById("taskId").value || "").trim();
     const date = document.getElementById("taskDate").value;
     const time = document.getElementById("taskTime").value;
@@ -123,7 +143,16 @@
     }
 
     const action = mode === "task_edit" ? "update_task" : "create_task";
-    const payload = { action, date, time, district, seats_total, has_cargo: cargoState, comment };
+    const payload = {
+      action,
+      date,
+      time,
+      district,
+      seats_total,
+      has_cargo: cargoState,
+      comment,
+    };
+
     if (action === "update_task") payload.id = parseInt(id || "0", 10);
 
     send(payload);
@@ -131,6 +160,7 @@
 
   reqForm.addEventListener("submit", (e) => {
     e.preventDefault();
+
     const id = (document.getElementById("reqId").value || "").trim();
     const comment = (document.getElementById("reqComment").value || "").trim();
 
@@ -141,6 +171,7 @@
 
     const action = mode === "request_edit" ? "update_request" : "create_request";
     const payload = { action, comment };
+
     if (action === "update_request") payload.id = parseInt(id || "0", 10);
 
     send(payload);
