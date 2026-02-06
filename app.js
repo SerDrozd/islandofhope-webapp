@@ -1,37 +1,18 @@
 (function () {
   const tg = window.Telegram?.WebApp;
-    const diag = {
-      hasTelegramObject: !!window.Telegram,
-      hasWebApp: !!window.Telegram?.WebApp,
-      ua: navigator.userAgent,
-      initDataLen: window.Telegram?.WebApp?.initData?.length || 0,
-      hashHasTgWebAppData: /tgWebAppData=/.test(location.hash || ""),
-      hashLen: (location.hash || "").length,
-    };
 
-    const dbg = document.createElement("pre");
-    dbg.style.whiteSpace = "pre-wrap";
-    dbg.style.fontSize = "12px";
-    dbg.style.opacity = "0.9";
-    dbg.style.marginTop = "12px";
-    dbg.style.padding = "10px";
-    dbg.style.borderRadius = "12px";
-    dbg.style.border = "1px solid rgba(255,255,255,.12)";
-    dbg.style.background = "rgba(255,255,255,.04)";
-    dbg.textContent = "DIAG:\n" + JSON.stringify(diag, null, 2);
-    document.querySelector(".card")?.appendChild(dbg);
   if (tg) {
     tg.ready();
     tg.expand();
   }
 
+  // --------- helpers ----------
   const qs = new URLSearchParams(location.search);
   const mode = (qs.get("mode") || "task").toLowerCase();
   const dataB64 = qs.get("data") || "";
 
   const elTitle = document.getElementById("pageTitle");
   const elSub = document.getElementById("pageSub");
-
   const taskForm = document.getElementById("taskForm");
   const reqForm = document.getElementById("reqForm");
   const status = document.getElementById("status");
@@ -56,21 +37,80 @@
     }
   }
 
-  // ---- initData fallback: try to extract from URL hash (#tgWebAppData=...) ----
+  // ✅ Универсально вытаскиваем initData
   function extractInitData() {
+    // 1) стандартный способ
     if (tg?.initData && tg.initData.length > 0) return tg.initData;
 
-    const h = window.location.hash || "";
-    const m = h.match(/tgWebAppData=([^&]+)/);
-    if (m && m[1]) {
-      try {
-        return decodeURIComponent(m[1]);
-      } catch {
-        return m[1];
-      }
+    // 2) hash может быть разным форматом. Берём строку после "#"
+    const hash = (window.location.hash || "").replace(/^#/, "");
+    if (!hash) return "";
+
+    // hash иногда уже querystring: a=b&c=d
+    // иногда что-то вроде: tgWebAppPlatform=...&tgWebAppData=....
+    // иногда tgWebAppData может быть без "=" в начале — поэтому проверим варианты.
+
+    // Попытка распарсить как querystring
+    try {
+      const hp = new URLSearchParams(hash);
+
+      // Частые ключи:
+      const v1 = hp.get("tgWebAppData");
+      if (v1) return safeDecode(v1);
+
+      const v2 = hp.get("tgWebAppInitData");
+      if (v2) return safeDecode(v2);
+
+      const v3 = hp.get("tgWebAppDataRaw");
+      if (v3) return safeDecode(v3);
+    } catch {
+      // ignore
     }
+
+    // 3) Если это не querystring, попробуем regex по любому месту в hash:
+    // tgWebAppData=....
+    let m = hash.match(/(?:^|[&?])tgWebAppData=([^&]+)/);
+    if (m && m[1]) return safeDecode(m[1]);
+
+    m = hash.match(/(?:^|[&?])tgWebAppInitData=([^&]+)/);
+    if (m && m[1]) return safeDecode(m[1]);
+
+    // 4) Иногда Telegram кладёт initData в initDataUnsafe, но это НЕ подписанная строка.
+    // Нам нужна именно подписанная initData (строка), поэтому unsafe не подходит для валидации.
     return "";
   }
+
+  function safeDecode(s) {
+    try {
+      return decodeURIComponent(s);
+    } catch {
+      return s;
+    }
+  }
+
+  // --------- DIAG (оставь пока) ----------
+  const diag = {
+    hasTelegramObject: !!window.Telegram,
+    hasWebApp: !!window.Telegram?.WebApp,
+    ua: navigator.userAgent,
+    initDataLen: window.Telegram?.WebApp?.initData?.length || 0,
+    hashHasTgWebAppData: /tgWebAppData/.test(location.hash || ""),
+    hashLen: (location.hash || "").length,
+    extractedInitDataLen: extractInitData().length,
+  };
+
+  const dbg = document.createElement("pre");
+  dbg.style.whiteSpace = "pre-wrap";
+  dbg.style.fontSize = "12px";
+  dbg.style.opacity = "0.9";
+  dbg.style.marginTop = "12px";
+  dbg.style.padding = "10px";
+  dbg.style.borderRadius = "12px";
+  dbg.style.border = "1px solid rgba(255,255,255,.12)";
+  dbg.style.background = "rgba(255,255,255,.04)";
+  dbg.textContent = "DIAG:\n" + JSON.stringify(diag, null, 2);
+  document.querySelector(".card")?.appendChild(dbg);
+  // --------- /DIAG ----------
 
   // Toggle cargo
   const cargoBtn = document.getElementById("taskCargo");
@@ -81,7 +121,6 @@
     cargoBtn?.setAttribute("aria-pressed", cargoState ? "true" : "false");
     if (cargoBtn) cargoBtn.textContent = cargoState ? "Да" : "Нет";
   }
-
   cargoBtn?.addEventListener("click", () => setCargo(!cargoState));
 
   // Show correct form
@@ -99,7 +138,6 @@
       reqForm.classList.remove("hidden");
     }
   }
-
   showMode(mode);
 
   // Prefill
@@ -133,7 +171,7 @@
     payload.initData = initData;
 
     if (!initData) {
-      showStatus("⛔ initData пустой. Открывай форму только кнопкой бота.", false);
+      showStatus("⛔ initData пустой. Значит Telegram не передал подпись в WebApp.", false);
       return;
     }
 
@@ -162,16 +200,7 @@
     }
 
     const action = mode === "task_edit" ? "update_task" : "create_task";
-    const payload = {
-      action,
-      date,
-      time,
-      district,
-      seats_total,
-      has_cargo: cargoState,
-      comment,
-    };
-
+    const payload = { action, date, time, district, seats_total, has_cargo: cargoState, comment };
     if (action === "update_task") payload.id = parseInt(id || "0", 10);
 
     send(payload);
@@ -190,7 +219,6 @@
 
     const action = mode === "request_edit" ? "update_request" : "create_request";
     const payload = { action, comment };
-
     if (action === "update_request") payload.id = parseInt(id || "0", 10);
 
     send(payload);
