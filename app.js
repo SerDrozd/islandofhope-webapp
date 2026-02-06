@@ -2,9 +2,18 @@
   const tg = window.Telegram?.WebApp;
   if (tg) {
     tg.ready();
+    console.log("tg exists:", !!tg);
+    console.log("initData length:", tg?.initData?.length || 0);
+    console.log("initDataUnsafe:", tg?.initDataUnsafe || null);
     tg.expand();
   }
-
+  const dbg = document.createElement("div");
+  dbg.style.fontSize = "12px";
+  dbg.style.opacity = "0.8";
+  dbg.style.marginTop = "10px";
+  dbg.textContent = "initData length: " + (tg?.initData?.length || 0);
+  document.querySelector(".card")?.appendChild(dbg);
+  
   const qs = new URLSearchParams(location.search);
   const mode = (qs.get("mode") || "task").toLowerCase();
   const dataB64 = qs.get("data") || "";
