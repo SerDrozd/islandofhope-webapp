@@ -97,6 +97,7 @@
     hashHasTgWebAppData: /tgWebAppData/.test(location.hash || ""),
     hashLen: (location.hash || "").length,
     extractedInitDataLen: extractInitData().length,
+    hashPreview: (location.hash || "").slice(0, 160)
   };
 
   const dbg = document.createElement("pre");
