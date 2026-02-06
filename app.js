@@ -5,182 +5,135 @@
     tg.expand();
   }
 
-  const $ = (id) => document.getElementById(id);
-  const errorBox = $("errorBox");
+  const qs = new URLSearchParams(location.search);
+  const mode = (qs.get("mode") || "task").toLowerCase();
+  const dataB64 = qs.get("data") || "";
 
-  function showError(msg) {
-    errorBox.textContent = msg;
-    errorBox.classList.remove("hidden");
-  }
-  function clearError() {
-    errorBox.textContent = "";
-    errorBox.classList.add("hidden");
-  }
+  const elTitle = document.getElementById("pageTitle");
+  const elSub = document.getElementById("pageSub");
 
-  function pathMode() {
-    const p = (window.location.pathname || "/").toLowerCase();
-    if (p.includes("/task")) return "task";
-    if (p.includes("/request")) return "request";
-    // fallback: use query ?mode=
-    const mode = new URLSearchParams(window.location.search).get("mode");
-    return (mode === "task" || mode === "request") ? mode : "task";
+  const taskForm = document.getElementById("taskForm");
+  const reqForm = document.getElementById("reqForm");
+  const status = document.getElementById("status");
+
+  function showStatus(text, ok) {
+    status.classList.remove("hidden", "ok", "err");
+    status.classList.add(ok ? "ok" : "err");
+    status.textContent = text;
   }
 
-  const mode = pathMode();
-  const params = new URLSearchParams(window.location.search);
-  const editId = params.get("id"); // task_id or request_id for editing
-
-  const title = $("title");
-  const subtitle = $("subtitle");
-  const taskForm = $("taskForm");
-  const requestForm = $("requestForm");
-
-  function setTitle(t, s) {
-    title.textContent = t;
-    subtitle.textContent = s || "Внутри Telegram WebApp";
-  }
-
-  function initDefaultsTask() {
-    // set default date/time to nearest
-    const now = new Date();
-    const yyyy = now.getFullYear();
-    const mm = String(now.getMonth() + 1).padStart(2, "0");
-    const dd = String(now.getDate()).padStart(2, "0");
-    $("task_date").value = `${yyyy}-${mm}-${dd}`;
-
-    const hh = String(now.getHours()).padStart(2, "0");
-    const mi = String(now.getMinutes()).padStart(2, "0");
-    $("task_time").value = `${hh}:${mi}`;
-
-    $("task_seats").value = "1";
-    $("task_cargo").checked = false;
-  }
-
-  function sanitizeText(s, maxLen) {
-    s = (s || "").toString().trim();
-    if (maxLen && s.length > maxLen) s = s.slice(0, maxLen);
-    return s;
-  }
-
-  function getInitData() {
-    // This is what we validate on the bot / backend
-    return tg ? (tg.initData || "") : "";
-  }
-
-  async function apiGet(url) {
-    // pass initData in query (simple), could also use header X-Tg-Init-Data
-    const initData = encodeURIComponent(getInitData());
-    const sep = url.includes("?") ? "&" : "?";
-    const full = `${url}${sep}initData=${initData}`;
-    const res = await fetch(full, { method: "GET" });
-    const j = await res.json().catch(() => ({}));
-    if (!res.ok || !j.ok) {
-      throw new Error(j.error || `HTTP ${res.status}`);
+  function b64ToJson(b64) {
+    try {
+      // urlsafe base64
+      const padded = b64.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((b64.length + 3) % 4);
+      const raw = atob(padded);
+      const bytes = new Uint8Array([...raw].map(c => c.charCodeAt(0)));
+      const str = new TextDecoder("utf-8").decode(bytes);
+      return JSON.parse(str);
+    } catch {
+      return null;
     }
-    return j;
+  }
+
+  // Toggle cargo
+  const cargoBtn = document.getElementById("taskCargo");
+  let cargoState = false;
+  function setCargo(v) {
+    cargoState = !!v;
+    cargoBtn.setAttribute("aria-pressed", cargoState ? "true" : "false");
+    cargoBtn.textContent = cargoState ? "Да" : "Нет";
+  }
+  cargoBtn?.addEventListener("click", () => setCargo(!cargoState));
+
+  // Show correct form
+  function showMode(m) {
+    taskForm.classList.add("hidden");
+    reqForm.classList.add("hidden");
+
+    if (m.startsWith("task")) {
+      elTitle.textContent = m === "task_edit" ? "Редактирование задачи" : "Новая задача";
+      elSub.textContent = "Заполни поля и отправь в бот";
+      taskForm.classList.remove("hidden");
+    } else {
+      elTitle.textContent = m === "request_edit" ? "Редактирование заявки" : "Новая заявка";
+      elSub.textContent = "Опиши, что нужно отвезти";
+      reqForm.classList.remove("hidden");
+    }
+  }
+
+  showMode(mode);
+
+  // Prefill
+  const prefill = dataB64 ? b64ToJson(dataB64) : null;
+  if (prefill) {
+    if (mode.startsWith("task")) {
+      document.getElementById("taskId").value = prefill.id || "";
+      document.getElementById("taskDate").value = prefill.date || "";
+      document.getElementById("taskTime").value = prefill.time || "";
+      document.getElementById("taskDistrict").value = prefill.district || "";
+      document.getElementById("taskSeats").value = prefill.seats_total || 1;
+      document.getElementById("taskComment").value = prefill.comment || "";
+      setCargo(!!prefill.has_cargo);
+      document.getElementById("taskSubmit").textContent = "Сохранить";
+    } else {
+      document.getElementById("reqId").value = prefill.id || "";
+      document.getElementById("reqComment").value = prefill.comment || "";
+      document.getElementById("reqSubmit").textContent = "Сохранить";
+    }
+  } else {
+    if (mode.startsWith("task")) setCargo(false);
   }
 
   function send(payload) {
-    clearError();
     if (!tg) {
-      showError("Откройте форму внутри Telegram (WebApp).");
+      showStatus("Открой это внутри Telegram.", false);
       return;
     }
-    payload.initData = getInitData(); // IMPORTANT: bot validates this
+    payload.initData = tg.initData; // важно: подпись
     tg.sendData(JSON.stringify(payload));
+    showStatus("✅ Отправлено", true);
+    setTimeout(() => tg.close(), 450);
   }
 
-  async function loadEditData() {
-    if (!editId) return;
+  taskForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const id = (document.getElementById("taskId").value || "").trim();
+    const date = document.getElementById("taskDate").value;
+    const time = document.getElementById("taskTime").value;
+    const district = (document.getElementById("taskDistrict").value || "").trim();
+    const seats_total = parseInt(document.getElementById("taskSeats").value || "0", 10);
+    const comment = (document.getElementById("taskComment").value || "").trim();
 
-    if (mode === "task") {
-      setTitle("Редактирование задачи", `#${editId}`);
-      const j = await apiGet(`/api/task?id=${encodeURIComponent(editId)}`);
-      const t = j.task;
-
-      $("task_date").value = t.date || "";
-      $("task_time").value = t.time || "";
-      $("task_district").value = t.district || "";
-      $("task_seats").value = String(t.seats_total ?? 1);
-      $("task_cargo").checked = (Number(t.has_cargo) === 1);
-      $("task_comment").value = t.comment || "";
+    if (!date || !time || district.length < 2) {
+      showStatus("Заполни дату, время и район.", false);
+      return;
+    }
+    if (!Number.isFinite(seats_total) || seats_total < 1 || seats_total > 99) {
+      showStatus("Кол-во мест должно быть 1..99.", false);
       return;
     }
 
-    if (mode === "request") {
-      setTitle("Редактирование заявки", `#${editId}`);
-      const j = await apiGet(`/api/request?id=${encodeURIComponent(editId)}`);
-      const r = j.request;
-      $("req_comment").value = r.comment || "";
+    const action = mode === "task_edit" ? "update_task" : "create_task";
+    const payload = { action, date, time, district, seats_total, has_cargo: cargoState, comment };
+    if (action === "update_task") payload.id = parseInt(id || "0", 10);
+
+    send(payload);
+  });
+
+  reqForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const id = (document.getElementById("reqId").value || "").trim();
+    const comment = (document.getElementById("reqComment").value || "").trim();
+
+    if (comment.length < 3) {
+      showStatus("Комментарий слишком короткий.", false);
       return;
     }
-  }
 
-  function setSent(statusEl) {
-    statusEl.textContent = "✅ Отправлено";
-    setTimeout(() => {
-      try { tg.close(); } catch (e) {}
-    }, 450);
-  }
+    const action = mode === "request_edit" ? "update_request" : "create_request";
+    const payload = { action, comment };
+    if (action === "update_request") payload.id = parseInt(id || "0", 10);
 
-  // ----- render mode -----
-  if (mode === "task") {
-    taskForm.classList.remove("hidden");
-    requestForm.classList.add("hidden");
-
-    setTitle(editId ? "Редактирование задачи" : "Новая задача", "Заполните поля");
-    initDefaultsTask();
-
-    loadEditData().catch((e) => showError(`Не удалось загрузить данные: ${e.message}`));
-
-    $("task_submit").addEventListener("click", () => {
-      clearError();
-      const date = $("task_date").value;
-      const time = $("task_time").value;
-      const district = sanitizeText($("task_district").value, 60);
-      const seats = Number($("task_seats").value);
-      const hasCargo = $("task_cargo").checked;
-      const comment = sanitizeText($("task_comment").value, 500);
-
-      if (!date) return showError("Укажите дату.");
-      if (!time) return showError("Укажите время.");
-      if (!district || district.length < 2) return showError("Укажите район (минимум 2 символа).");
-      if (!Number.isInteger(seats) || seats < 1 || seats > 99) return showError("Количество мест должно быть 1..99.");
-
-      const payload = {
-        action: editId ? "update_task" : "create_task",
-        ...(editId ? { id: Number(editId) } : {}),
-        date,
-        time,
-        district,
-        seats_total: seats,
-        has_cargo: hasCargo,
-        comment,
-      };
-
-      send(payload);
-      setSent($("task_status"));
-    });
-  } else {
-    requestForm.classList.remove("hidden");
-    taskForm.classList.add("hidden");
-
-    setTitle(editId ? "Редактирование заявки" : "Новая заявка", "Опишите что и куда");
-    loadEditData().catch((e) => showError(`Не удалось загрузить данные: ${e.message}`));
-
-    $("req_submit").addEventListener("click", () => {
-      clearError();
-      const comment = sanitizeText($("req_comment").value, 800);
-      if (!comment || comment.length < 3) return showError("Комментарий должен быть минимум 3 символа.");
-
-      const payload = {
-        action: editId ? "update_request" : "create_request",
-        ...(editId ? { id: Number(editId) } : {}),
-        comment,
-      };
-
-      send(payload);
-      setSent($("req_status"));
-    });
-  }
+    send(payload);
+  });
 })();
