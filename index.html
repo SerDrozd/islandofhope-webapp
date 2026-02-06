@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Mini App</title>
+
+  <!-- Telegram WebApp SDK -->
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div class="wrap">
+    <header class="topbar">
+      <div class="topbar__title" id="title">Форма</div>
+      <div class="topbar__sub" id="subtitle">Внутри Telegram WebApp</div>
+    </header>
+
+    <main class="card" id="card">
+      <!-- TASK FORM -->
+      <section id="taskForm" class="form hidden">
+        <div class="row">
+          <label class="field">
+            <span class="label">Дата</span>
+            <input type="date" id="task_date" required />
+            <span class="hint">Выберите дату поездки</span>
+          </label>
+          <label class="field">
+            <span class="label">Время</span>
+            <input type="time" id="task_time" required />
+            <span class="hint">Во сколько старт</span>
+          </label>
+        </div>
+
+        <label class="field">
+          <span class="label">Район</span>
+          <input type="text" id="task_district" placeholder="Например: Адмиралтейский / Выборгский / Пушкинский" required maxlength="60"/>
+          <span class="hint">Коротко: где встреча / район</span>
+        </label>
+
+        <div class="row">
+          <label class="field">
+            <span class="label">Количество мест</span>
+            <input type="number" id="task_seats" min="1" max="99" step="1" required />
+            <span class="hint">Сколько свободных мест</span>
+          </label>
+
+          <label class="field toggle">
+            <span class="label">Место для вещей</span>
+            <div class="switch">
+              <input type="checkbox" id="task_cargo" />
+              <span class="slider"></span>
+            </div>
+            <span class="hint">Можно ли взять багаж</span>
+          </label>
+        </div>
+
+        <label class="field">
+          <span class="label">Комментарий</span>
+          <textarea id="task_comment" rows="4" placeholder="Детали: маршрут, условия, связь... (необязательно)" maxlength="500"></textarea>
+          <span class="hint">До 500 символов</span>
+        </label>
+
+        <button class="btn" id="task_submit">Отправить</button>
+        <div class="status" id="task_status"></div>
+      </section>
+
+      <!-- REQUEST FORM -->
+      <section id="requestForm" class="form hidden">
+        <label class="field">
+          <span class="label">Комментарий</span>
+          <textarea id="req_comment" rows="6" placeholder="Что нужно отвезти, куда, детали контакта..." required maxlength="800"></textarea>
+          <span class="hint">Опишите максимально понятно</span>
+        </label>
+
+        <button class="btn" id="req_submit">Отправить</button>
+        <div class="status" id="req_status"></div>
+      </section>
+
+      <section id="errorBox" class="error hidden"></section>
+    </main>
+
+    <footer class="footer">
+      <div class="muted">Данные отправляются боту через <b>Telegram.WebApp.sendData()</b>.</div>
+    </footer>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
